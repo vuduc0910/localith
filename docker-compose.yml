@@ -1,7 +1,7 @@
 # Localith + Ollama + ChromaDB in one stack.
 #
 #   docker compose up -d --build
-#   docker compose run --rm app npm run scan -- https://example.com --knowledge
+#   docker compose run --rm app localith scan https://example.com --knowledge
 #   open http://localhost:3000/ui
 #
 # Model names are read from .env when it exists (OLLAMA_MODEL, OLLAMA_EMBED_MODEL).

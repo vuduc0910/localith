@@ -1,6 +1,8 @@
+target/
 node_modules/
 dist/
 reports/*
 !reports/.gitkeep
 .DS_Store
 .env
+target-win/

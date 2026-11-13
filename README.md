@@ -47,6 +47,7 @@ flowchart TD
 
 ## 🛠️ Technology Stack
 
+- **Language:** Rust (single self-contained binary)
 - **Browser Automation:** Browser Agents
 - **Local LLM Runtime:** Ollama
 - **Embeddings:** Configurable embedding models
@@ -64,46 +65,47 @@ Instead of manually collecting documents and feeding them into an AI assistant, 
 ## Requirements
 
 - macOS (Apple Silicon or Intel), Linux, or Windows 10/11 x64
-- Node.js 24+ (required by current agent-browser releases)
+- [Rust](https://rustup.rs) 1.82+ to build Localith
+- [`agent-browser`](https://github.com/vercel-labs/agent-browser), which is installed through npm (Node.js 24+)
 - Ollama installed and running
 - Internet access to the target website
 
 ## 1. Install
 
-Install Node.js 24+ first: `brew install node` on macOS, `winget install OpenJS.NodeJS` on Windows, or your distribution's package / [nodejs.org](https://nodejs.org) on Linux.
-
 ```bash
-
 # Install Ollama from https://ollama.com/download
 # Then pull the local model
 ollama pull qwen3:4b
 
-# In the project folder
-npm install
-cp .env.example .env  # optional: edit model/crawl settings (PowerShell: Copy-Item .env.example .env)
+# Install the browser CLI and download Chrome for Testing
+npm install -g agent-browser
+agent-browser install
 
-# Download Chrome for Testing used by agent-browser
-npx agent-browser install
+# In the project folder: build and install the `localith` command
+cargo install --path .
+cp .env.example .env  # optional: edit model/crawl settings (PowerShell: Copy-Item .env.example .env)
 ```
 
-On Linux, run `npx agent-browser install --with-deps` instead to also install the system libraries Chrome needs.
+On Linux, run `agent-browser install --with-deps` instead to also install the system libraries Chrome needs.
 
-All `npm run ...` commands in this README work the same in Terminal, PowerShell, and Command Prompt.
+`localith` is a single executable. Run it from the folder where you want the `reports/` directory to live; it reads an optional `.env` file from that folder. During development you can use `cargo run -- <command>` instead of installing, for example `cargo run -- scan https://example.com`.
+
+Localith looks for `agent-browser` in `./node_modules`, in a global npm install, and on `PATH`. Set `AGENT_BROWSER_BIN` to point at a specific executable.
 
 ### Alternative: Docker Compose
 
-If you prefer not to install Node.js, Ollama, and ChromaDB yourself, the included `docker-compose.yml` starts all three together:
+If you prefer not to install Rust, agent-browser, Ollama, and ChromaDB yourself, the included `docker-compose.yml` builds Localith and starts everything together:
 
 ```bash
 # Build the app image, start Ollama + ChromaDB, and download the models
 docker compose up -d --build
 
 # Run a scan inside the app container
-docker compose run --rm app npm run scan -- https://example.com --knowledge
+docker compose run --rm app localith scan https://example.com --knowledge
 
 # Index and search
-docker compose run --rm app npm run rag:index
-docker compose run --rm app npm run rag:search -- "how can I create a report?"
+docker compose run --rm app localith index
+docker compose run --rm app localith search "how can I create a report?"
 ```
 
 - The web UI and API are served on `http://localhost:3000` (local interface only).
@@ -111,8 +113,6 @@ docker compose run --rm app npm run rag:search -- "how can I create a report?"
 - The first start downloads the models, which takes a while. Follow progress with `docker compose logs -f ollama-pull`.
 - Model names come from `.env` when it exists (`OLLAMA_MODEL`, `OLLAMA_EMBED_MODEL`). `OLLAMA_URL` and `CHROMA_URL` are set by Compose and do not need editing.
 - Ollama runs on CPU in this setup. For GPU acceleration, add a GPU reservation to the `ollama` service or run Ollama natively.
-
-`agent-browser` documents the project-local installation flow as `npm install agent-browser` followed by `agent-browser install`.
 
 ## 2. Start Ollama
 
@@ -133,7 +133,7 @@ ollama list
 ## 3. Run a scan
 
 ```bash
-npm run scan -- https://example.com
+localith scan https://example.com
 ```
 
 Default settings:
@@ -147,7 +147,7 @@ Default settings:
 ## 4. Options
 
 ```bash
-npm run scan -- https://example.com --depth 3 --max-pages 100 --delay-ms 1200
+localith scan https://example.com --depth 3 --max-pages 100 --delay-ms 1200
 ```
 
 Available options:
@@ -192,7 +192,7 @@ Example:
 ```bash
 cp .env.example .env
 # edit AUTH_EMAIL and AUTH_PASSWORD, then
-npm run scan -- https://example.com --auth
+localith scan https://example.com --auth
 ```
 
 Only use this on sites you own or have permission to access.
@@ -252,10 +252,10 @@ The AI Knowledge Engine consumes crawl output (`report.json` and page extraction
 ### Start the HTTP Server
 
 ```bash
-npm run serve
+localith serve
 ```
 
-Server runs on `http://localhost:3000` (or configured `PORT`).
+Server runs on `http://localhost:3000` (or configured `PORT`). It listens on `127.0.0.1` only, because the API has no authentication; set `HOST=0.0.0.0` to expose it to other machines.
 
 ### Web UI
 
@@ -322,7 +322,7 @@ Like the crawler's page storage, Ollama screen knowledge is saved **immediately 
 - **Per-Screen Artifacts:** Each screen analysis is stored in `screens/screen-XXX.json`.
 - **Incremental State:** `knowledge.json` and `knowledge.md` are refreshed after each screen completes, so work is never lost if interrupted.
 - **Resumption / Reuse:** When running again on the same report directory, previously analyzed screens are automatically recognized from `knowledge.json` or `screens/` and reused, skipping redundant Ollama calls.
-- **Force Re-analysis:** Pass `--force` to the CLI (e.g. `npm run analyze -- --force`) or `"forceReanalyze": true` in API requests to re-run Ollama on all screens.
+- **Force Re-analysis:** Pass `--force` to the CLI (e.g. `localith analyze --force`) or `"forceReanalyze": true` in API requests to re-run Ollama on all screens.
 
 ### CLI Shortcuts
 
@@ -330,14 +330,14 @@ Generate knowledge directly from the terminal without starting the server:
 
 ```bash
 # Analyze the latest scan report (reusing any previously analyzed screens)
-npm run analyze
+localith analyze
 
 # Or specify a report directory
-npm run analyze -- reports/example-com-5ab12345
+localith analyze reports/example-com-5ab12345
 
 # Force re-analysis with Ollama even if screens were previously saved
-npm run analyze -- --force
-npm run analyze -- reports/example-com-5ab12345 --force
+localith analyze --force
+localith analyze reports/example-com-5ab12345 --force
 ```
 
 ## 7. RAG Vector Database (ChromaDB + nomic-embed-text)
@@ -369,13 +369,13 @@ You can index via CLI or HTTP API with a **dynamic collection name**:
 
 ```bash
 # Index latest crawl report with automatic collection name
-npm run rag:index
+localith index
 
 # Index with a custom dynamic collection name
-npm run rag:index -- --collection example_admin
+localith index --collection example_admin
 
 # Index a specific report or knowledge file
-npm run rag:index -- reports/example-com-5ab12345 --collection example_admin
+localith index reports/example-com-5ab12345 --collection example_admin
 ```
 
 #### Via HTTP Endpoint:
@@ -403,13 +403,13 @@ Ask questions against the indexed application knowledge base:
 
 ```bash
 # Example user questions:
-npm run rag:search -- "how can I create a report?"
-npm run rag:search -- "what is perk template?"
-npm run rag:search -- "how do I reset password?"
-npm run rag:search -- "I want create quiz for my student how can I do it?"
+localith search "how can I create a report?"
+localith search "what is perk template?"
+localith search "how do I reset password?"
+localith search "I want create quiz for my student how can I do it?"
 
 # Specify a collection:
-npm run rag:search -- "how can I create a report?" --collection example_admin
+localith search "how can I create a report?" --collection example_admin
 ```
 
 #### Via HTTP Endpoint:
@@ -453,7 +453,7 @@ curl http://localhost:3000/api/rag/collections
 
 ### `Could not run agent-browser`
 
-The project installs `agent-browser` locally and launches it from `node_modules` directly, so it does not need to be on PATH. Run `npm install`, then `npx agent-browser --help` to verify it works. To use a different build, set `AGENT_BROWSER_BIN` to its path.
+Localith could not find or start the `agent-browser` executable. Run `npm install -g agent-browser`, then `agent-browser --help` to verify it works. To use a specific build, set `AGENT_BROWSER_BIN` to its path.
 
 ### Ollama connection error
 
@@ -474,8 +474,8 @@ ollama list
 ### Browser installation
 
 ```bash
-npx agent-browser install
-npx agent-browser doctor
+agent-browser install
+agent-browser doctor
 ```
 
 ## License
